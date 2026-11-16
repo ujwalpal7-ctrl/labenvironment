@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LabEnvironment</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<style>
+:root{--bg:#f2f6f3;--card:#fff;--ink:#14302b;--mute:#52665f;--line:#cfdcd5;--acc:#0e7c66;--acc-ink:#fff;--t:#d9482b;--h:#2468b3;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1b18;--card:#172622;--ink:#e6f0ec;--mute:#9bb2aa;--line:#2c443d;--acc:#3fc3a3;--acc-ink:#07201a;--t:#ff7b5c;--h:#6aa8f0;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1b18;--card:#172622;--ink:#e6f0ec;--mute:#9bb2aa;--line:#2c443d;--acc:#3fc3a3;--acc-ink:#07201a;--t:#ff7b5c;--h:#6aa8f0;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Atkinson Hyperlegible",system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:16px}
+h1{font-size:1.7rem;margin:8px 0 2px}
+h2{font-size:1.15rem;margin:0 0 10px}
+p{margin:0 0 10px}.mute{color:var(--mute)}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:14px 0}
+section.off{opacity:.5;pointer-events:none}
+button{font:inherit;font-weight:700;border:2px solid var(--acc);background:var(--acc);color:var(--acc-ink);padding:10px 16px;border-radius:8px;cursor:pointer;min-height:44px}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button.sel{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible{outline:3px solid var(--h);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.read{display:flex;gap:12px;margin:12px 0}
+.read div{flex:1;border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center}
+.read b{display:block;font-size:2rem;line-height:1.1}
+.read .t b{color:var(--t)}.read .h b{color:var(--h)}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem;min-width:620px}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:right}
+th:first-child,td:first-child{text-align:left}
+input[type=number]{width:70px;font:inherit;padding:4px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.ch{position:relative;height:240px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:620px){.grid{grid-template-columns:1fr}}
+#concl li{margin-bottom:6px}
+</style>
+</head>
+<body>
+<main>
+<h1>LabEnvironment</h1>
+<p class="mute">Mide temperatura y humedad en tres lugares y compara los resultados. Este modo usa un sensor DHT22 simulado.</p>
+
+<section id="s1">
+<h2>Paso 1. Conecta el sensor</h2>
+<div class="row"><button id="bConn">Conectar al sensor</button><span id="stConn" class="mute">Sin conexión</span></div>
+</section>
+
+<section id="s2" class="off">
+<h2>Paso 2. Elige el lugar y mide</h2>
+<div class="row" id="envBtns"></div>
+<div class="read"><div class="t"><span class="mute">Temperatura</span><b id="rT">--</b>°C</div><div class="h"><span class="mute">Humedad relativa</span><b id="rH">--</b>%</div></div>
+<div class="row"><button id="bMeas">Iniciar medición (3 s)</button><span id="stMeas" class="mute"></span></div>
+<p class="mute" style="margin-top:10px">Cada medición promedia 3 lecturas, 1 por segundo. Necesitas al menos 5 por lugar.</p>
+<div class="ch"><canvas id="cLive"></canvas></div>
+</section>
+
+<section id="s3" class="off">
+<h2>Paso 3. Revisa tus datos</h2>
+<p class="mute">Escribe los valores de tu termómetro e higrómetro de referencia para calcular el error.</p>
+<div class="wrap"><table><thead><tr><th>Lugar</th><th>n</th><th>T prom. (°C)</th><th>σ T (°C)</th><th>T ref. (°C)</th><th>Error T (%)</th><th>H prom. (%)</th><th>σ H (%)</th><th>H ref. (%)</th><th>Error H (%)</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="grid" style="margin-top:14px"><div class="ch"><canvas id="cT"></canvas></div><div class="ch"><canvas id="cH"></canvas></div></div>
+</section>
+
+<section id="s4" class="off">
+<h2>Paso 4. Saca conclusiones</h2>
+<ul id="concl"></ul>
+<button class="ghost" id="bReset">Borrar datos y empezar de nuevo</button>
+</section>
+</main>
+<script>
+const E=[{id:'sala',n:'Sala',T:22,H:45},{id:'ext',n:'Exterior',T:16,H:60},{id:'ven',n:'Ventana',T:19,H:52}];
+const D={sala:[],ext:[],ven:[]},R={};E.forEach(e=>R[e.id]={t:e.T,h:e.H});
+let cur=E[0],on=false,busy=false;
+const $=i=>document.getElementById(i);
+const css=getComputedStyle(document.documentElement);
+Chart.defaults.color=css.getPropertyValue('--ink').trim()||'#14302b';
+Chart.defaults.font.family='"Atkinson Hyperlegible",system-ui,sans-serif';
+const gauss=()=>{let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+const mean=a=>a.reduce((s,x)=>s+x,0)/a.length;
+const sd=a=>a.length<2?0:Math.sqrt(a.reduce((s,x)=>s+(x-mean(a))**2,0)/(a.length-1));
+const f=(x,d=1)=>x==null||isNaN(x)?'--':x.toFixed(d);
+const read=e=>({t:e.T+gauss()*0.3,h:Math.min(100,e.H+gauss()*1.5)});
+
+const live=new Chart($('cLive'),{type:'line',data:{labels:[],datasets:[
+{label:'Temperatura (°C)',data:[],borderColor:'#d9482b',yAxisID:'y',tension:.2},
+{label:'Humedad (%)',data:[],borderColor:'#2468b3',yAxisID:'y1',tension:.2}]},
+options:{maintainAspectRatio:false,animation:false,scales:{x:{title:{display:true,text:'Tiempo (s)'}},y:{title:{display:true,text:'°C'},suggestedMin:10,suggestedMax:30},y1:{position:'right',title:{display:true,text:'% HR'},suggestedMin:30,suggestedMax:80,grid:{drawOnChartArea:false}}}}});
+const bar=(id,lab,col,unit)=>new Chart($(id),{type:'bar',data:{labels:E.map(e=>e.n),datasets:[{label:lab,data:[null,null,null],backgroundColor:col}]},
+options:{maintainAspectRatio:false,plugins:{legend:{display:true}},scales:{y:{beginAtZero:true,title:{display:true,text:unit}}}}});
+const cT=bar('cT','Temperatura promedio (°C)','#d9482b','°C'),cH=bar('cH','Humedad promedio (%)','#2468b3','% HR');
+
+E.forEach(e=>{const b=document.createElement('button');b.className='ghost';b.id='b_'+e.id;b.onclick=()=>{if(busy)return;cur=e;drawEnv();resetLive()};$('envBtns').appendChild(b)});
+function drawEnv(){E.forEach(e=>{const b=$('b_'+e.id);b.textContent=e.n+' ('+D[e.id].length+'/5)';b.className=(e===cur?'sel ':'')+'ghost'})}
+function resetLive(){live.data.labels=[];live.data.datasets.forEach(d=>d.data=[]);live.update();$('rT').textContent=$('rH').textContent='--';$('stMeas').textContent=''}
+
+$('bConn').onclick=()=>{$('bConn').disabled=true;$('stConn').textContent='Conectando a la red LabEnvironment-ESP32…';
+setTimeout(()=>{on=true;$('stConn').textContent='Conectado. Sensor DHT22 listo (192.168.4.1, simulado).';
+['s2','s3'].forEach(i=>$(i).classList.remove('off'));drawEnv();render()},1300)};
+
+$('bMeas').onclick=()=>{if(busy)return;busy=true;$('bMeas').disabled=true;resetLive();const ts=[],hs=[];let s=0;
+const tick=()=>{const r=read(cur);ts.push(r.t);hs.push(r.h);s++;
+live.data.labels.push(s);live.data.datasets[0].data.push(+r.t.toFixed(2));live.data.datasets[1].data.push(+r.h.toFixed(1));live.update();
+$('rT').textContent=f(r.t);$('rH').textContent=f(r.h);$('stMeas').textContent='Lectura '+s+' de 3…';
+if(s<3)setTimeout(tick,1000);else{D[cur.id].push({t:mean(ts),h:mean(hs)});busy=false;$('bMeas').disabled=false;
+$('stMeas').textContent='Medición guardada: '+f(mean(ts))+' °C y '+f(mean(hs))+' %.';drawEnv();render()}};tick()};
+
+function render(){
+$('tb').innerHTML=E.map(e=>{const d=D[e.id],T=d.map(x=>x.t),H=d.map(x=>x.h),n=d.length,rf=R[e.id];
+const eT=n&&rf.t?Math.abs(mean(T)-rf.t)/rf.t*100:null,eH=n&&rf.h?Math.abs(mean(H)-rf.h)/rf.h*100:null;
+return `<tr><td>${e.n}</td><td>${n}</td><td>${n?f(mean(T),2):'--'}</td><td>${n?f(sd(T),2):'--'}</td>
+<td><input type="number" step="0.1" value="${rf.t}" data-e="${e.id}" data-k="t" aria-label="T referencia ${e.n}"></td><td>${f(eT,2)}</td>
+<td>${n?f(mean(H),1):'--'}</td><td>${n?f(sd(H),1):'--'}</td>
+<td><input type="number" step="0.1" value="${rf.h}" data-e="${e.id}" data-k="h" aria-label="H referencia ${e.n}"></td><td>${f(eH,2)}</td></tr>`}).join('');
+document.querySelectorAll('#tb input').forEach(i=>i.onchange=()=>{R[i.dataset.e][i.dataset.k]=parseFloat(i.value)||0;render()});
+cT.data.datasets[0].data=E.map(e=>D[e.id].length?+mean(D[e.id].map(x=>x.t)).toFixed(2):null);
+cH.data.datasets[0].data=E.map(e=>D[e.id].length?+mean(D[e.id].map(x=>x.h)).toFixed(1):null);cT.update();cH.update();
+const ok=E.every(e=>D[e.id].length>=5);$('s4').classList.toggle('off',!ok);
+if(ok){const mt=E.map(e=>mean(D[e.id].map(x=>x.t))),mh=E.map(e=>mean(D[e.id].map(x=>x.h)));
+const hi=a=>a.indexOf(Math.max(...a)),lo=a=>a.indexOf(Math.min(...a));
+$('concl').innerHTML=`<li>El lugar más cálido fue <b>${E[hi(mt)].n}</b> (${f(mt[hi(mt)])} °C) y el más frío fue <b>${E[lo(mt)].n}</b> (${f(mt[lo(mt)])} °C).</li>
+<li>La mayor humedad relativa estuvo en <b>${E[hi(mh)].n}</b> (${f(mh[hi(mh)])} %) y la menor en <b>${E[lo(mh)].n}</b> (${f(mh[lo(mh)])} %).</li>
+<li>Compara con tu hipótesis: ¿la temperatura más alta coincide con la humedad más baja? Explica por qué.</li>`}}
+$('bReset').onclick=()=>{E.forEach(e=>D[e.id]=[]);resetLive();drawEnv();render()};
+render();
+</script>
+</body>
+</html>
